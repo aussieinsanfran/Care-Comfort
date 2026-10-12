@@ -1,0 +1,665 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Clinical Rounds: The Comfort Shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a night-unit workstation — census board on the left, the open chart on the right; vitals read like a bedside monitor. Committed single dark look. */
+:root{
+  --night:#0e1522; --panel:#162033; --panel-2:#1c2840; --line:#2b3b58;
+  --text:#e6ecf5; --muted:#97a6bf; --lamp:#f0b450; --lamp-ink:#1d1606;
+  --ok:#57d19c; --warn:#ff9f5a; --crit:#ff6b6b;
+  --hr:#5fe08c; --spo2:#5cc8ff; --bp:#ff8a8a; --rr:#f5d76e; --temp:#c9a4ff;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+  color-scheme:dark;
+}
+html,body{background:var(--night);color:var(--text)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0 40px}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--night);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding-block:14px;margin-inline:-16px;padding-inline:16px}
+.brand{display:flex;flex-direction:column;gap:0;min-width:0}
+.brand small{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:clamp(20px,3.2vw,28px);margin:0;line-height:1.1;text-wrap:balance}
+.brand h1 span{color:var(--lamp)}
+.hud{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
+.hud div{display:flex;flex-direction:column}
+.hud label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hud b{font-family:var(--f-mono);font-size:20px;font-variant-numeric:tabular-nums;font-weight:600}
+.hud .clock b{color:var(--lamp)}
+
+.wrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;max-width:1180px;margin:20px auto 0}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}}
+
+/* Census */
+.census{display:flex;flex-direction:column;gap:8px;align-self:start;position:sticky;top:calc(env(safe-area-inset-top,0px) + 86px)}
+.census h2{font-family:var(--f-display);font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;font-weight:500}
+.census p.hint{margin:0 0 6px;color:var(--muted);font-size:13px}
+.rooms{display:flex;flex-direction:column;gap:6px}
+@media (max-width:820px){
+  .census{position:static}
+  .rooms{flex-direction:row;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}
+  .room{min-width:190px;scroll-snap-align:start}
+}
+.room{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;
+  background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;cursor:pointer}
+.room:hover{background:var(--panel)}
+.room[aria-current="true"]{background:var(--panel-2);border-color:var(--lamp)}
+.room .num{font-family:var(--f-mono);font-weight:600;color:var(--lamp);font-size:13px}
+.room .who{min-width:0}
+.room .who b{display:block;font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room .who span{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--muted)}
+.dot.prog{border-color:var(--lamp);background:transparent;box-shadow:inset 0 0 0 2px var(--night),inset 0 0 0 6px var(--lamp)}
+.dot.s3{background:var(--ok);border-color:var(--ok)}
+.dot.s2{background:var(--lamp);border-color:var(--lamp)}
+.dot.s1,.dot.s0{background:var(--crit);border-color:var(--crit)}
+.reportbtn{margin-top:8px;background:var(--lamp);color:var(--lamp-ink);border:0;border-radius:var(--r);padding:10px 12px;font-weight:600;cursor:pointer}
+.reportbtn:disabled{background:var(--panel-2);color:var(--muted);cursor:not-allowed}
+
+/* Chart */
+.chart{min-width:0;display:flex;flex-direction:column;gap:16px}
+.pt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+.pt-head .rm{font-family:var(--f-mono);color:var(--lamp);font-size:14px;letter-spacing:.06em}
+.pt-head h2{font-family:var(--f-display);font-size:clamp(24px,3.6vw,34px);margin:0;line-height:1.1;font-weight:700;text-wrap:balance}
+.pt-head .dx{color:var(--muted);flex-basis:100%;font-size:15px}
+
+.monitor{background:#060a12;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 14px}
+@media (max-width:620px){.monitor{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.vital label{display:block;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;opacity:.85}
+.vital b{display:block;font-family:var(--f-mono);font-size:clamp(20px,3vw,28px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+.vital small{font-family:var(--f-mono);font-size:11px;opacity:.75}
+.v-hr{color:var(--hr)} .v-bp{color:var(--bp)} .v-spo2{color:var(--spo2)} .v-rr{color:var(--rr)} .v-t{color:var(--temp)}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:700px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.box h3{margin:0 0 8px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sbar{display:grid;grid-template-columns:22px minmax(0,1fr);gap:4px 10px;margin:0}
+.sbar dt{font-family:var(--f-mono);font-weight:600;color:var(--lamp)}
+.sbar dd{margin:0 0 6px}
+.labs{width:100%;border-collapse:collapse;font-size:14px}
+.labs td{padding:4px 0;border-bottom:1px solid var(--line)}
+.labs td:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.labs tr.flag td:last-child{color:var(--warn);font-weight:600}
+.labs tr.flag td:last-child::after{content:" ▲"}
+.labs tr.flag.lo td:last-child::after{content:" ▼"}
+.meds{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.meds li{padding-left:14px;position:relative}
+.meds li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:1px;background:var(--muted)}
+
+/* Stability */
+.stab{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.stab .bar{flex:1 1 220px;height:12px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.stab .fill{height:100%;border-radius:6px;transition:width .6s ease,background-color .6s ease}
+.stab .lbl{font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;min-width:4ch}
+.pill{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;padding:3px 10px;border-radius:999px;border:1px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.crit{color:var(--crit)} .pill.mute{color:var(--muted)}
+
+/* Questions */
+.q{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.q .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.q .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--lamp);font-weight:600}
+.q .step{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.q .time{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:auto}
+.q p.stem{margin:0 0 12px;font-size:16px;max-width:68ch}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;align-items:start;text-align:left;cursor:pointer;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.opt:hover:not(:disabled){border-color:var(--lamp)}
+.opt:disabled{cursor:default}
+.opt .k{font-family:var(--f-mono);font-weight:600;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;border:1px solid var(--line);font-size:13px}
+.opt.right{border-color:var(--ok)} .opt.right .k{background:var(--ok);color:var(--night);border-color:var(--ok)}
+.opt.wrong{border-color:var(--crit)} .opt.wrong .k{background:var(--crit);color:var(--night);border-color:var(--crit)}
+.opt.dim{opacity:.55}
+.opt.sata .k{border-radius:3px}
+.opt.picked{border-color:var(--lamp);background:var(--panel)}
+.opt.picked .k{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp)}
+.opt.missed{border-color:var(--ok);border-style:dashed}
+.opt.missed .k{color:var(--ok);border-color:var(--ok);border-style:dashed}
+.btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.sata-hint{font-size:12px;color:var(--lamp);font-weight:600;letter-spacing:.04em}
+.why{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.why p{margin:0;max-width:72ch}
+.why .verdict{font-weight:600}
+.why .verdict.ok{color:var(--ok)} .why .verdict.bad{color:var(--crit)}
+.done-q{opacity:.82}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp);font-weight:600}
+.btn:hover{filter:brightness(1.08)}
+
+.outcome{display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--line);padding:4px 0 4px 14px}
+.outcome.ok{border-color:var(--ok)} .outcome.warn{border-color:var(--warn)} .outcome.crit{border-color:var(--crit)}
+.outcome h3{margin:0;font-family:var(--f-display);font-size:20px}
+.outcome p{margin:0;color:var(--muted);max-width:70ch}
+
+/* Report */
+.report h2{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);margin:0}
+.report .sub{color:var(--muted);margin:4px 0 0}
+.cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:620px){.cats{grid-template-columns:minmax(0,1fr)}}
+.cat b{font-family:var(--f-mono);font-size:28px;font-variant-numeric:tabular-nums;display:block}
+.cat span{color:var(--muted);font-size:13px}
+.tbl-wrap{overflow-x:auto}
+.rtbl{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+.rtbl th{text-align:left;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+.rtbl td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.rtbl td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.review{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.field{display:flex;flex-direction:column;gap:4px;max-width:360px}
+.field label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.field input{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;color:var(--text);font:inherit}
+textarea.copytext{width:100%;min-height:180px;background:#060a12;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--f-mono);font-size:12.5px}
+.note{color:var(--muted);font-size:13px;max-width:75ch}
+.toast{font-size:13px;color:var(--ok)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="brand"><small>Med-Surg 5 West · Day shift · NCLEX-RN practice</small><h1>Clinical Rounds: <span>The Comfort Shift</span></h1></div>
+  <div class="hud">
+    <div class="clock"><label>Unit clock</label><b id="clock">07:00</b></div>
+    <div><label>Patients seen</label><b id="seen">0/10</b></div>
+    <div><label>Score</label><b id="score">0/30</b></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="census" aria-label="Unit census">
+    <h2>Census</h2>
+    <p class="hint">Ten patients, thirty NCLEX-style items on basic care and comfort: mobility, elimination, nutrition, hygiene, rest and comfort. Select-all-that-apply items are scored all or nothing.</p>
+    <div class="rooms" id="rooms"></div>
+    <button class="reportbtn" id="reportBtn" disabled>End-of-shift report</button>
+    <button class="btn" id="resetBtn" style="margin-top:2px">Start a new shift</button>
+  </aside>
+  <main class="chart" id="chart" aria-live="polite"></main>
+</div>
+
+<script>
+const CASES = [
+{id:"701",unit:"5 West",tag:"Crutches",name:"Jordan Ellis",age:24,sex:"M",dx:"Closed right tibial fracture, non-weight-bearing on crutches",
+ s:"Going home today; he has never used crutches before.",
+ b:"Fell from a skateboard. Long-leg cast applied yesterday. Physical therapy fitted his crutches this morning.",
+ a:"Alert and steady standing. Toes warm and pink, capillary refill under 3 seconds, wiggles toes. Pain 4/10.",
+ r:"Needs crutch and stair teaching before discharge.",
+ mon:[["HR","82","sinus","hr"],["BP","124/76","mmHg","bp"],["SpO₂","99%","room air","spo2"],["RR","16","/min","rr"],["PAIN","4/10","after oxycodone","temp"]],
+ labs:[["X-ray","closed midshaft tibial fracture, aligned",""],["Neurovascular check","intact",""],["Weight-bearing order","non-weight-bearing, right leg","hi"]],
+ meds:["Axillary crutches","Oxycodone 5 mg PO q4h PRN pain","Elevate the leg on pillows","Ice to the cast 20 minutes at a time for the first 48 hours"],
+ qs:[
+  {cat:"Mobility & Assistive Devices",topic:"Safe crutch use and stairs",
+   stem:"Which instructions should the nurse include in his crutch teaching? Select all that apply.",
+   o:["Keep a space of 2 to 3 finger widths between your armpit and the crutch pad.",
+      "Support your weight on your hands, not your armpits.",
+      "Keep your elbows slightly bent, about 20 to 30 degrees, on the handgrips.",
+      "Going up stairs, step up with your uninjured leg first, then bring up the crutches and injured leg.",
+      "Rest your armpits on the crutch pads when you stand still.",
+      "Going down stairs, step down with your uninjured leg first."],
+   c:[0,1,2,3],why:"Pressure on the armpit can compress the brachial plexus (crutch palsy), so weight goes through the hands with the elbows slightly bent. On stairs, remember \"up with the good, down with the bad\": going up, the strong leg lifts the body. Going down, the crutches and injured leg go first so the strong leg can lower the body under control."},
+  {cat:"Mobility & Assistive Devices",topic:"Choosing a crutch gait",
+   stem:"Which gait should the nurse teach for non-weight-bearing on one leg?",
+   o:["Four-point gait",
+      "Two-point gait",
+      "Three-point gait: advance both crutches and the injured leg together, then swing the uninjured leg forward",
+      "Advance the right crutch with the left leg, then the left crutch with the right leg."],
+   c:2,why:"Four-point and two-point gaits require some weight bearing on both legs. In a three-point gait the two crutches act as one point, the injured leg is held off the floor, and the uninjured leg carries all the body weight."},
+  {cat:"Mobility & Assistive Devices",topic:"Crutch palsy",
+   stem:"At his follow-up visit he reports tingling and numbness in both hands and forearms. What is the most likely cause?",
+   o:["He grips the handgrips too loosely.",
+      "He leans on the axillary pads, compressing the nerves in his armpits.",
+      "His cast is too tight.",
+      "Normal muscle fatigue from new crutch use"],
+   c:1,why:"Leaning on the axillary pads compresses the radial nerve and brachial plexus, causing tingling, numbness and eventually weakness in the arms. Recheck the crutch length and reinforce bearing weight on the hands. A tight cast causes symptoms in the casted leg, not the arms."}
+ ]},
+{id:"702",unit:"5 West",tag:"Hip replacement",name:"Eleanor Vance",age:78,sex:"F",dx:"Left total hip arthroplasty, posterior approach, postoperative day 2",
+ s:"Wants to walk to the bathroom and put on her own shoes.",
+ b:"Osteoarthritis. Lives alone in a two-story house. Used a cane at home before surgery.",
+ a:"Incision clean and dry. Abduction pillow in place. Weight bearing as tolerated. Pain 3/10.",
+ r:"Physical therapy recommends a walker for now and a cane at discharge.",
+ mon:[["HR","84","sinus","hr"],["BP","132/78","mmHg","bp"],["SpO₂","96%","room air","spo2"],["RR","16","/min","rr"],["PAIN","3/10","acetaminophen","temp"]],
+ labs:[["Hemoglobin","10.4 g/dL","lo"],["Weight bearing","as tolerated, left leg",""],["Hip precautions","posterior","hi"]],
+ meds:["Enoxaparin 40 mg subcut daily","Acetaminophen 1 g PO q8h","Oxycodone 5 mg PO q4h PRN","Raised toilet seat, reacher and sock aid"],
+ qs:[
+  {cat:"Mobility & Assistive Devices",topic:"Cane technique",
+   stem:"When she switches to a cane, which instruction is correct?",
+   o:["Hold the cane in your left hand, on the side of your surgery.",
+      "Hold the cane in your right hand and move it forward at the same time as your left leg.",
+      "Hold the cane in your right hand and move it forward with your right leg.",
+      "Use the cane only on stairs."],
+   c:1,why:"The cane goes on the stronger side, opposite the surgery. That widens the base of support, shifts weight off the operated hip, and matches the natural opposite arm swing of walking. The cane and the operated leg move forward together."},
+  {cat:"Mobility & Assistive Devices",topic:"Posterior hip precautions",
+   stem:"Which actions maintain her hip precautions? Select all that apply.",
+   o:["Keep an abduction pillow between her legs while she is in bed.",
+      "Use a raised toilet seat.",
+      "Use a long-handled reacher and sock aid to dress.",
+      "Avoid crossing her legs or turning her operated leg inward.",
+      "Sit in a low, soft recliner to relax.",
+      "Bend forward to tie her shoes while sitting."],
+   c:[0,1,2,3],why:"After a posterior approach, the hip can dislocate with flexion beyond 90 degrees, adduction past the midline, or internal rotation. Low chairs, low toilets and bending forward all flex the hip too far. The abduction pillow prevents adduction, and adaptive equipment lets her dress without bending."},
+  {cat:"Mobility & Assistive Devices",topic:"Walker safety",
+   stem:"Which action by the client using the walker requires the nurse to intervene?",
+   o:["She pushes up from the arms of the chair, then reaches for the walker.",
+      "She pulls on the walker to bring herself up to standing.",
+      "She moves the walker about 15 to 20 cm forward and steps into it with her left leg first.",
+      "She sets all four legs of the walker on the floor before stepping."],
+   c:1,why:"A walker is light and tips easily when someone pulls on it, which can cause a fall. She should push up from the chair arms, then hold the walker once standing. The other actions are correct walker technique."}
+ ]},
+{id:"703",unit:"5 West",tag:"Immobility",name:"Samuel Ortiz",age:68,sex:"M",dx:"Right-hemisphere stroke with left hemiplegia",
+ s:"Stays in whatever position he is placed in; he can't turn himself.",
+ b:"Stroke 6 days ago. Urinary and occasional fecal incontinence. Eats about half of his meals.",
+ a:"Left arm and leg flaccid. A 3 cm area of intact, nonblanchable redness over the sacrum. Left heel skin intact but maroon and boggy. Braden score 11.",
+ r:"Turning schedule in place. Wound care nurse consulted.",
+ mon:[["HR","76","sinus","hr"],["BP","148/86","mmHg","bp"],["SpO₂","96%","room air","spo2"],["RR","18","/min","rr"],["BRADEN","11","high risk","temp"]],
+ labs:[["Albumin","3.1 g/dL","lo"],["Prealbumin","13 mg/dL","lo"],["Hemoglobin","11.8 g/dL","lo"],["Glucose","132 mg/dL","hi"]],
+ meds:["Reposition at least every 2 hours","Pressure-redistribution mattress","Barrier cream after each incontinent episode","Protein supplement PO BID"],
+ qs:[
+  {cat:"Mobility & Assistive Devices",topic:"Pressure injury prevention",
+   stem:"Which interventions help prevent further pressure injury? Select all that apply.",
+   o:["Keep the head of the bed at 30 degrees or lower unless contraindicated.",
+      "Float his heels off the bed with a pillow under his calves.",
+      "Use a lift sheet and enough help to move him up in bed.",
+      "Massage the reddened area on his sacrum to improve circulation.",
+      "Seat him on a donut-shaped cushion when he sits in the chair.",
+      "Clean his skin promptly after incontinence and apply a moisture barrier."],
+   c:[0,1,2,5],why:"A head of bed above 30 degrees makes him slide, which shears the sacral skin. Floating the heels removes all pressure from them. A lift sheet prevents friction and shear. Massaging reddened skin damages the tissue underneath, and donut cushions concentrate pressure on the surrounding ring and reduce blood flow."},
+  {cat:"Mobility & Assistive Devices",topic:"Staging pressure injuries",
+   stem:"How should the nurse document the area on his left heel?",
+   o:["Stage 1 pressure injury",
+      "Stage 2 pressure injury",
+      "Deep tissue pressure injury",
+      "Unstageable pressure injury"],
+   c:2,why:"Intact skin with persistent, nonblanchable deep red, maroon or purple color, or a blood-filled blister, is a deep tissue pressure injury. The damage is in deeper tissue and can open quickly. Stage 1 is intact nonblanchable redness, like his sacrum. Unstageable means the wound bed is hidden by slough or eschar."},
+  {cat:"Mobility & Assistive Devices",topic:"Protecting a flaccid shoulder",
+   stem:"Which action by the assistive personnel (AP) requires the nurse to intervene?",
+   o:["The AP supports his left arm on a pillow when he sits up.",
+      "The AP pulls him up in bed by holding under his left arm.",
+      "The AP uses a lift sheet with a second person to reposition him.",
+      "The AP places a pillow between his knees when he lies on his side."],
+   c:1,why:"The muscles around a flaccid shoulder can't hold the joint in place, so pulling on that arm can cause shoulder subluxation and lasting pain. Support the arm and move him with a lift sheet."}
+ ]},
+{id:"704",unit:"5 West",tag:"Constipation",name:"Helen Marsh",age:72,sex:"F",dx:"Postoperative day 3 after abdominal hysterectomy, on oral opioids",
+ s:"No bowel movement for 4 days; feels bloated.",
+ b:"Usually has a bowel movement every morning. Drinks little because she \"doesn't want to bother anyone\" for help to the bathroom.",
+ a:"Abdomen mildly distended and soft, hypoactive bowel sounds, passing gas. Small amounts of liquid stool on her pad this morning.",
+ r:"Bowel regimen ordered. Provider asked for a rectal assessment for impaction.",
+ mon:[["HR","86","sinus","hr"],["BP","128/74","mmHg","bp"],["SpO₂","97%","room air","spo2"],["RR","16","/min","rr"],["PAIN","4/10","oxycodone","temp"]],
+ labs:[["Abdominal X-ray","large stool burden in the rectum","hi"],["Potassium","3.6 mEq/L",""],["Hemoglobin","11.2 g/dL","lo"]],
+ meds:["Oxycodone 5 mg PO q4h PRN","Senna 8.6 mg PO BID","Polyethylene glycol 17 g PO daily","Tap water cleansing enema PRN"],
+ qs:[
+  {cat:"Elimination & Nutrition",topic:"Promoting bowel elimination",
+   stem:"Which interventions will help restore her bowel elimination? Select all that apply.",
+   o:["Encourage 2 to 3 L of fluid a day unless restricted.",
+      "Help her walk in the hall several times a day.",
+      "Give the scheduled senna and polyethylene glycol.",
+      "Offer the bathroom after breakfast.",
+      "Hold her oxycodone so her bowels can recover.",
+      "Have her use a bedpan lying flat for privacy."],
+   c:[0,1,2,3],why:"Fluids soften stool and walking stimulates peristalsis. A stimulant plus an osmotic laxative counters opioid-induced constipation. Eating triggers the gastrocolic reflex, so after breakfast is the best time to try. Withholding pain relief isn't the answer; treat the side effect. Sitting upright on a toilet or commode uses gravity and abdominal muscles far better than lying flat."},
+  {cat:"Elimination & Nutrition",topic:"Recognizing fecal impaction",
+   stem:"Liquid stool is leaking, and she hasn't had a formed stool in 4 days. What does this most likely indicate?",
+   o:["Diarrhea from the senna",
+      "Fecal impaction, with liquid stool seeping around a hard mass",
+      "C. difficile infection",
+      "Returning bowel function"],
+   c:1,why:"With no formed stool, distension and a rectal stool burden on X-ray, leakage of liquid stool suggests an impaction that liquid stool is flowing around. Giving an antidiarrheal would make it worse. Assess per protocol and notify the provider."},
+  {cat:"Elimination & Nutrition",topic:"Cramping during an enema",
+   stem:"During a cleansing enema she reports abdominal cramping. What should the nurse do?",
+   o:["Remove the tube and stop the procedure.",
+      "Clamp the tubing or lower the bag, have her take slow deep breaths, and resume when the cramping passes.",
+      "Raise the bag higher to finish the enema faster.",
+      "Ask her to bear down while the fluid runs in."],
+   c:1,why:"Cramping means the fluid is running too fast or the bowel is distending. Lowering the bag slows the flow, and slow breathing relaxes the abdominal muscles. Raising the bag increases pressure and cramping. Position her in left lateral (Sims) position so the solution follows the shape of the sigmoid colon."}
+ ]},
+{id:"705",unit:"5 West",tag:"Incontinence",name:"Arthur Bloom",age:82,sex:"M",dx:"Moderate Alzheimer disease with functional incontinence; admitted with pneumonia",
+ s:"Wets himself on the way to the bathroom; his wife says he \"can't find the toilet in time.\"",
+ b:"Moderate dementia. Continent at home with reminders. Walks slowly with a walker.",
+ a:"No burning with urination; post-void residual 40 mL. The bathroom is across the room behind a chair. Wearing pants with buttons he struggles to undo.",
+ r:"The day nurse asked whether an indwelling catheter would \"make it easier.\" New order for oxybutynin.",
+ mon:[["HR","88","sinus","hr"],["BP","136/80","mmHg","bp"],["SpO₂","94%","2 L NC","spo2"],["RR","20","/min","rr"],["TEMP","37.6","°C","temp"]],
+ labs:[["Urinalysis","negative",""],["Post-void residual","40 mL",""],["WBC","12.1 ×10³/µL","hi"]],
+ meds:["Ceftriaxone 1 g IV daily","Donepezil 10 mg PO at bedtime","Oxybutynin 5 mg PO TID (new order)","External condom catheter at night"],
+ qs:[
+  {cat:"Elimination & Nutrition",topic:"Managing functional incontinence",
+   stem:"Which interventions are appropriate for his incontinence? Select all that apply.",
+   o:["Offer toileting on a schedule, such as every 2 hours while awake.",
+      "Clear a direct path to the bathroom and leave a light on at night.",
+      "Dress him in pants with an elastic waist.",
+      "Place a urinal or bedside commode within reach.",
+      "Insert an indwelling catheter to keep him dry.",
+      "Limit his fluids to 1 L a day to reduce wet episodes."],
+   c:[0,1,2,3],why:"In functional incontinence the bladder works normally (his residual is only 40 mL); the barriers are cognition, mobility and the environment. Scheduled toileting, a clear path, easy clothing and nearby equipment remove those barriers. An indwelling catheter raises infection risk without an indication. Restricting fluid concentrates urine, irritates the bladder and risks dehydration."},
+  {cat:"Elimination & Nutrition",topic:"Anticholinergics in older adults with dementia",
+   stem:"What should the nurse do about the new oxybutynin order?",
+   o:["Give it as ordered with breakfast.",
+      "Question it. An anticholinergic can worsen his confusion, works against donepezil, and doesn't treat functional incontinence.",
+      "Give it only at bedtime to reduce nighttime wetting.",
+      "Give it and monitor for diarrhea."],
+   c:1,why:"Oxybutynin treats urge incontinence by relaxing the bladder. It is strongly anticholinergic, is on the Beers list for older adults with dementia, and opposes donepezil's effect. It can also cause urinary retention and constipation. His problem is functional, so the drug addresses the wrong cause."},
+  {cat:"Elimination & Nutrition",topic:"Applying a condom catheter",
+   stem:"Which action by the AP applying his condom catheter requires the nurse to intervene?",
+   o:["The AP leaves 2.5 to 5 cm of space between the tip of the penis and the end of the catheter.",
+      "The AP wraps adhesive tape around the shaft of the penis to keep the catheter on.",
+      "The AP checks the skin of the penis when changing the catheter each day.",
+      "The AP keeps the drainage bag below the level of his bladder."],
+   c:1,why:"Tape wrapped around the shaft can't expand and can cut off blood flow. Use the catheter's own adhesive strip or the securing device supplied. Leaving space at the tip prevents irritation and lets urine drain. The other actions are correct."}
+ ]},
+{id:"706",unit:"5 West",tag:"Dysphagia",name:"Beatrice Nguyen",age:76,sex:"F",dx:"Dysphagia after left-hemisphere stroke",
+ s:"Coughs during meals; asks for a glass of water with a straw.",
+ b:"Stroke 5 days ago with right-sided weakness. Speech-language pathology approved a mechanical soft diet with mildly thick (nectar-thick) liquids.",
+ a:"Right facial droop. Food pocketed in her right cheek after meals. Lungs clear.",
+ r:"The AP will help with lunch. Her daughter wants to bring food from home.",
+ mon:[["HR","80","sinus","hr"],["BP","142/84","mmHg","bp"],["SpO₂","96%","room air","spo2"],["RR","18","/min","rr"],["TEMP","36.9","°C","temp"]],
+ labs:[["Swallow study","aspirates thin liquids","hi"],["Sodium","146 mEq/L","hi"],["BUN","26 mg/dL","hi"],["Albumin","3.3 g/dL","lo"]],
+ meds:["Mechanical soft diet","Mildly thick (nectar-thick) liquids only","Aspiration precautions","Oral care before and after meals"],
+ qs:[
+  {cat:"Elimination & Nutrition",topic:"Aspiration precautions during meals",
+   stem:"Which actions reduce her risk of aspiration during meals? Select all that apply.",
+   o:["Sit her upright at 90 degrees for meals and for 30 minutes afterward.",
+      "Have her tuck her chin toward her chest when she swallows.",
+      "Place food on the left side of her mouth.",
+      "Give her water with a straw so she can control the amount.",
+      "Check her right cheek for pocketed food after meals.",
+      "Encourage her to talk during the meal to keep her alert."],
+   c:[0,1,2,4],why:"Upright positioning and the chin tuck help protect the airway. Food placed on the stronger (left) side is easier to control. Pocketed food on the weak side can be aspirated later. Straws deliver liquid quickly to the back of the throat, and talking while eating opens the airway, so both increase aspiration risk."},
+  {cat:"Elimination & Nutrition",topic:"Signs of aspiration",
+   stem:"Which finding during lunch should make the nurse stop the meal and assess her?",
+   o:["She eats slowly and takes small bites.",
+      "Her voice sounds wet and gurgly after she swallows.",
+      "She asks for more salt.",
+      "She leaves part of her meal."],
+   c:1,why:"A wet, gurgly voice after swallowing suggests food or liquid has entered the larynx. Stop feeding, have her cough, suction if needed, assess her lungs and oxygen saturation, and notify the speech-language pathologist. Coughing and choking are other signs, but silent aspiration can happen without them."},
+  {cat:"Elimination & Nutrition",topic:"Thin liquids in disguise",
+   stem:"Which item on the AP's lunch tray requires the nurse to intervene?",
+   o:["Mashed potatoes",
+      "A bowl of gelatin and a cup of ice chips",
+      "Nectar-thick apple juice",
+      "Soft scrambled eggs"],
+   c:1,why:"Gelatin and ice chips melt into thin liquid at body temperature, so they count as thin liquids unless the speech-language pathologist specifically allows them. She aspirates thin liquids on her swallow study. Her high sodium and BUN also suggest she isn't getting enough fluid, so offer thickened fluids often."}
+ ]},
+{id:"707",unit:"5 West",tag:"Tube feeding",name:"Victor Hale",age:59,sex:"M",dx:"Head and neck cancer with a PEG tube; continuous enteral feeding",
+ s:"Coughing during his feeding; says \"something came up in my throat.\"",
+ b:"Finished radiation last month and can't swallow safely. PEG placed 2 weeks ago. Continuous feeding at 65 mL/h.",
+ a:"Lying flat after his bath with the feeding still running. Coughing; SpO₂ dropped from 96% to 89%.",
+ r:"Morning medications due through the tube, including an extended-release tablet.",
+ mon:[["HR","104","sinus tach","hr"],["BP","132/80","mmHg","bp"],["SpO₂","89%","was 96%","spo2"],["RR","26","/min","rr"],["TEMP","37.2","°C","temp"]],
+ labs:[["Glucose","156 mg/dL","hi"],["Sodium","138 mEq/L",""],["Prealbumin","14 mg/dL","lo"],["Phosphorus","3.0 mg/dL",""]],
+ meds:["Enteral formula 65 mL/h continuous","Free water flush 30 mL q4h","Metoprolol succinate ER 50 mg daily via tube","Omeprazole suspension 20 mg daily via tube","Acetaminophen liquid 650 mg q6h PRN"],
+ qs:[
+  {cat:"Elimination & Nutrition",topic:"Suspected aspiration during tube feeding",
+   stem:"What should the nurse do first?",
+   o:["Check the gastric residual volume.",
+      "Stop the feeding and raise the head of the bed.",
+      "Flush the tube with 30 mL of water.",
+      "Listen to his lung sounds."],
+   c:1,why:"Coughing and falling oxygen saturation while flat with the feeding running suggest aspiration. Stop the source and raise the head of the bed first. Then assess his lungs, suction if needed, give oxygen per protocol, and notify the provider. Checking residual or listening first delays removing the cause."},
+  {cat:"Elimination & Nutrition",topic:"Tube feeding and medication administration",
+   stem:"Which actions are correct for his tube feeding and medications? Select all that apply.",
+   o:["Keep the head of the bed at 30 to 45 degrees while the feeding runs.",
+      "Flush the tube with water before and after each medication.",
+      "Give each medication separately.",
+      "Mix all the medications into the formula bag.",
+      "Use liquid forms of medications when available.",
+      "Use a 3 mL syringe to flush a clogged tube with force."],
+   c:[0,1,2,4],why:"Elevating the head of the bed reduces reflux and aspiration. Flushing and giving drugs one at a time prevent clogging and drug-formula interactions. Mixing drugs into formula alters doses and can clog the tube. Small syringes generate very high pressure and can rupture the tube; use a 60 mL syringe and warm water for clogs."},
+  {cat:"Elimination & Nutrition",topic:"Do not crush extended-release drugs",
+   stem:"What should the nurse do about the extended-release metoprolol?",
+   o:["Crush it finely and mix it with 30 mL of water.",
+      "Contact the prescriber or pharmacist for a form that can be given through the tube.",
+      "Hold it until he can swallow again.",
+      "Dissolve it in the formula."],
+   c:1,why:"Crushing an extended-release tablet releases the whole day's dose at once, which can cause bradycardia and hypotension. Ask for an immediate-release form on an adjusted schedule. Holding a beta blocker without an order risks rebound tachycardia and hypertension."}
+ ]},
+{id:"708",unit:"5 West",tag:"Pain and comfort",name:"Lucia Benedetti",age:45,sex:"F",dx:"Lumbar laminectomy, postoperative day 1",
+ s:"Lower back pain 7/10; asks for an ice pack.",
+ b:"Type 2 diabetes with peripheral neuropathy in both feet. Her daughter is staying overnight.",
+ a:"Dressing dry. Moves both legs with normal strength. Reduced sensation in both feet (her baseline). Guarding and shallow breathing.",
+ r:"Morphine PCA running. Ice pack ordered 20 minutes q2h PRN.",
+ mon:[["HR","98","sinus","hr"],["BP","138/86","mmHg","bp"],["SpO₂","96%","room air","spo2"],["RR","18","/min","rr"],["PAIN","7/10","lower back","temp"]],
+ labs:[["Glucose","168 mg/dL","hi"],["Creatinine","0.8 mg/dL",""],["Sedation (POSS)","1, awake and alert",""]],
+ meds:["Morphine PCA 1 mg demand, 10-minute lockout","Acetaminophen 1 g IV q6h","Ice pack 20 minutes q2h PRN","Ondansetron 4 mg IV PRN"],
+ qs:[
+  {cat:"Comfort, Rest & Hygiene",topic:"Safe cold application",
+   stem:"Which actions are correct when applying the ice pack? Select all that apply.",
+   o:["Place a cloth barrier between the ice pack and her skin.",
+      "Leave it on for about 15 to 20 minutes, then remove it.",
+      "Check the skin under the pack for numbness, mottling or blanching.",
+      "Leave it in place while she sleeps to keep the swelling down.",
+      "Apply a second ice pack to her feet if they ache.",
+      "Tell her to report burning or numbness under the pack."],
+   c:[0,1,2,5],why:"Cold reduces swelling and pain, but prolonged or direct contact can cause frostbite and nerve injury. Longer than about 20 minutes also triggers a rebound vasodilation. Her neuropathy means she can't feel cold injury in her feet, so cold or heat should not go there."},
+  {cat:"Comfort, Rest & Hygiene",topic:"PCA by proxy",
+   stem:"Which statement by her daughter requires the nurse to intervene?",
+   o:["\"I'll remind her to press the button before she gets up to walk.\"",
+      "\"I'll press the button for her while she sleeps so she doesn't wake up in pain.\"",
+      "\"I'll tell the nurse if she seems very sleepy.\"",
+      "\"I'll help her with her breathing exercises.\""],
+   c:1,why:"PCA is safe because a client who becomes sedated stops pressing the button. When someone else presses it (PCA by proxy), that safety check is lost, and oversedation and respiratory depression can follow. Only the client presses the button."},
+  {cat:"Comfort, Rest & Hygiene",topic:"Teaching non-drug pain relief",
+   stem:"When is the best time to teach her slow deep breathing and guided imagery?",
+   o:["When her pain is at its worst, so she can practice right away",
+      "When her pain is mild or controlled, so she can learn it and use it before pain escalates",
+      "Only after the PCA is discontinued",
+      "Just before she falls asleep"],
+   c:1,why:"Severe pain makes it hard to concentrate and learn. Teaching when pain is controlled lets her practice the skill and then use it alongside medication, before activity, and when pain starts to build."}
+ ]},
+{id:"709",unit:"5 West",tag:"Rest and sleep",name:"Irene Albright",age:84,sex:"F",dx:"Heart failure exacerbation; poor sleep in hospital",
+ s:"\"I haven't slept in two nights. Can I have a sleeping pill?\"",
+ b:"Admitted 3 days ago. At home she reads and drinks warm milk before bed. Uses CPAP for obstructive sleep apnea, but her machine is at home.",
+ a:"Tired and irritable. Vital signs, blood draws and IV alarms woke her several times last night. Napped 3 hours this afternoon.",
+ r:"PRN diphenhydramine is on the admission order set. Her daughter can bring the CPAP tonight.",
+ mon:[["HR","78","sinus","hr"],["BP","130/76","mmHg","bp"],["SpO₂","93%","room air","spo2"],["SLEEP","3 h","last night","rr"],["TEMP","36.8","°C","temp"]],
+ labs:[["BNP","420 pg/mL","hi"],["Sodium","136 mEq/L",""],["STOP-BANG score","6, high risk","hi"]],
+ meds:["Furosemide 40 mg PO at 0900 and 1700","Diphenhydramine 25 mg PO PRN sleep","Melatonin 3 mg PO PRN sleep","CPAP at night"],
+ qs:[
+  {cat:"Comfort, Rest & Hygiene",topic:"Promoting sleep in hospital",
+   stem:"Which actions promote sleep for her tonight? Select all that apply.",
+   o:["Cluster care so she has uninterrupted stretches of at least 90 minutes.",
+      "Dim the lights and reduce noise and alarms at night.",
+      "Support her bedtime routine, such as reading and warm milk.",
+      "Encourage another long afternoon nap tomorrow.",
+      "Ask the provider whether the 1700 furosemide dose can be given earlier in the day.",
+      "Give the PRN diphenhydramine."],
+   c:[0,1,2,4],why:"A full sleep cycle takes about 90 minutes, so clustering care allows restorative sleep. Familiar routines signal bedtime. An evening diuretic causes nocturia and wakes her. Long daytime naps reduce sleep at night. Diphenhydramine is on the Beers list for older adults because it causes confusion, urinary retention and falls."},
+  {cat:"Comfort, Rest & Hygiene",topic:"Obstructive sleep apnea in hospital",
+   stem:"Which action is most important for her sleep apnea tonight?",
+   o:["Raise the head of the bed to 45 degrees instead of using CPAP.",
+      "Make sure her CPAP is brought in and used tonight, or request one from respiratory therapy.",
+      "Give a sedative so she sleeps through the apneas.",
+      "Increase her oxygen to 6 L by nasal cannula."],
+   c:1,why:"CPAP keeps her upper airway open during sleep. Without it she has repeated apneas, hypoxemia and fragmented sleep, which also strains her heart. Sedatives relax the airway muscles and blunt arousal, making apnea dangerous. Supplemental oxygen doesn't prevent airway obstruction."},
+  {cat:"Comfort, Rest & Hygiene",topic:"Sleep hygiene teaching",
+   stem:"Which statement indicates that she understands sleep hygiene for home?",
+   o:["\"A glass of wine at bedtime will help me fall asleep.\"",
+      "\"I'll go to bed and get up at the same time every day.\"",
+      "\"I'll watch TV in bed until I get sleepy.\"",
+      "\"I'll have coffee after dinner if I feel tired.\""],
+   c:1,why:"A consistent schedule keeps the circadian rhythm steady. Alcohol helps people fall asleep but fragments sleep later in the night and worsens sleep apnea. Screens and caffeine late in the day delay sleep onset."}
+ ]},
+{id:"710",unit:"5 West",tag:"End-of-life comfort",name:"Thomas Avery",age:88,sex:"M",dx:"End-stage heart failure on comfort-focused care",
+ s:"His family says he seems \"short of breath and gurgling.\"",
+ b:"Do-not-resuscitate order, comfort-focused care. Unresponsive since this morning. Family at the bedside.",
+ a:"Mouth breathing with dry, cracked lips. Noisy, wet respirations with pauses. Cool, mottled knees.",
+ r:"PRN morphine and glycopyrrolate ordered. The family asks what they can do to help.",
+ mon:[["HR","112","irregular","hr"],["BP","84/50","mmHg","bp"],["SpO₂","86%","2 L NC for comfort","spo2"],["RR","30","/min, irregular","rr"],["TEMP","37.9","°C","temp"]],
+ labs:[["Code status","DNR, comfort-focused care",""],["Routine labs","stopped per goals of care",""],["Palliative Performance Scale","10%","lo"]],
+ meds:["Morphine 2.5 mg subcut q1h PRN dyspnea or pain","Glycopyrrolate 0.2 mg subcut q4h PRN secretions","Oral care q2h","Lorazepam 0.5 mg subcut PRN agitation"],
+ qs:[
+  {cat:"Comfort, Rest & Hygiene",topic:"Mouth care for an unresponsive client",
+   stem:"Which mouth care actions are appropriate? Select all that apply.",
+   o:["Turn him on his side with his head turned before mouth care.",
+      "Keep suction ready.",
+      "Use a soft toothbrush or foam swab moistened with water.",
+      "Use lemon-glycerin swabs to stimulate saliva.",
+      "Apply a water-based moisturizer to his lips.",
+      "Rinse his mouth with a cup of water."],
+   c:[0,1,2,4],why:"An unresponsive client can't protect his airway, so side-lying positioning and suction help prevent aspiration. Moist swabs or a soft brush clean without injury. Lemon-glycerin swabs dry and irritate the mucosa. Pouring water into the mouth risks aspiration. A water-based lip moisturizer is also safe if he is on oxygen."},
+  {cat:"Comfort, Rest & Hygiene",topic:"Terminal respiratory secretions",
+   stem:"His daughter is distressed by the noisy breathing. What is the best nursing action?",
+   o:["Perform deep nasotracheal suctioning every hour.",
+      "Turn him on his side, give the PRN glycopyrrolate, and explain that the sound comes from secretions he can no longer clear and is not thought to distress him.",
+      "Increase his IV fluids to thin the secretions.",
+      "Tell her that nothing more can be done."],
+   c:1,why:"Repositioning helps secretions drain, and an anticholinergic reduces new secretions. Deep suctioning is uncomfortable and usually ineffective at this stage, and extra fluid increases secretions. Explaining what the sound means supports the family, who are also in your care."},
+  {cat:"Comfort, Rest & Hygiene",topic:"Non-drug relief of dyspnea",
+   stem:"Along with the PRN morphine, which intervention best relieves his breathlessness?",
+   o:["Switch him to a non-rebreather mask.",
+      "Direct a fan gently toward his face and keep his head elevated.",
+      "Start IV fluids.",
+      "Keep the room warm with extra blankets."],
+   c:1,why:"Cool air moving across the face stimulates the trigeminal nerve and reduces the sensation of breathlessness. Head elevation eases the work of breathing. A tight mask can be uncomfortable and frightening at the end of life, and oxygen helps only if it relieves symptoms. Extra blankets and heat can increase his distress."}
+ ]}
+];
+
+// Spread correct answers across A–D with a fixed, repeatable shuffle per question.
+CASES.forEach((c,ci)=>c.qs.forEach((q,qi)=>{
+  let a=(ci*97+qi*31+7)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296};
+  const idx=q.o.map((_,i)=>i);for(let i=idx.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+  q.o=idx.map(i=>q.o[i]);q.c=Array.isArray(q.c)?q.c.map(x=>idx.indexOf(x)).sort((x,y)=>x-y):idx.indexOf(q.c);
+}));
+
+const KEY="comfort-shift-v1";
+const CATS=["Mobility & Assistive Devices","Elimination & Nutrition","Comfort, Rest & Hygiene"];
+const L="ABCDEF";
+const isSata=q=>Array.isArray(q.c);
+function isRight(q,a){if(a===undefined)return false;if(isSata(q))return Array.isArray(a)&&a.length===q.c.length&&a.every((x,i)=>x===q.c[i]);return a===q.c}
+let pending={};
+let state={cur:0,ans:{},name:"",view:"case"};
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.ans)state=Object.assign(state,s)}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const answers=c=>state.ans[c.id]||[];
+const isDone=c=>answers(c).length===c.qs.length;
+const caseScore=c=>answers(c).reduce((n,a,i)=>n+(isRight(c.qs[i],a)?1:0),0);
+function stability(c){let s=55;answers(c).forEach((a,i)=>{s+=isRight(c.qs[i],a)?15:-15});return Math.max(10,Math.min(100,s))}
+function stabTone(s){return s>=85?"ok":s>=55?"warn":"crit"}
+function totals(){let seen=0,score=0,answered=0;CASES.forEach(c=>{if(isDone(c))seen++;score+=caseScore(c);answered+=answers(c).length});return{seen,score,answered}}
+function clockFor(n){const m=7*60+Math.round(n*72);const h=Math.floor(m/60)%24,mm=m%60;return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0")}
+
+function renderHud(){const t=totals();$("#clock").textContent=clockFor(t.answered/3);$("#seen").textContent=t.seen+"/10";$("#score").textContent=t.score+"/30";
+  $("#reportBtn").disabled=t.seen<CASES.length;}
+
+function renderRooms(){
+  $("#rooms").innerHTML=CASES.map((c,i)=>{
+    const a=answers(c);let cls="dot";if(isDone(c))cls+=" s"+caseScore(c);else if(a.length)cls+=" prog";
+    const st=isDone(c)?caseScore(c)+"/3":a.length?"in progress":"not seen";
+    return `<button class="room" data-i="${i}" aria-current="${state.view==="case"&&state.cur===i}" aria-label="Room ${c.id}, ${esc(c.name)}, ${st}">
+      <span class="num">${c.id}</span><span class="who"><b>${esc(c.name)}</b><span>${esc(c.tag||c.unit)}</span></span><span class="${cls}" title="${st}"></span></button>`}).join("");
+  document.querySelectorAll(".room").forEach(b=>b.onclick=()=>{state.cur=+b.dataset.i;state.view="case";save();render();window.scrollTo({top:0,behavior:"smooth"})});
+}
+
+function renderCase(){
+  const c=CASES[state.cur],a=answers(c),s=stability(c),tone=stabTone(s);
+  const labs=c.labs.map(l=>`<tr class="${l[2]?"flag "+l[2]:""}"><td>${esc(l[0])}</td><td>${esc(l[1])}</td></tr>`).join("");
+  let qhtml="";
+  c.qs.forEach((q,qi)=>{
+    if(qi>a.length)return;
+    const chosen=a[qi],answered=chosen!==undefined,sata=isSata(q),key=c.id+"-"+qi,sel=pending[key]||[];
+    const opts=q.o.map((t,oi)=>{let cls="opt"+(sata?" sata":"");
+      if(answered){const isC=sata?q.c.includes(oi):oi===q.c,picked=sata?chosen.includes(oi):oi===chosen;
+        if(isC&&picked)cls+=" right";else if(isC)cls+=sata?" missed":" right";else if(picked)cls+=" wrong";else cls+=" dim"}
+      else if(sata&&sel.includes(oi))cls+=" picked";
+      return `<button class="${cls}" data-q="${qi}" data-o="${oi}" ${answered?"disabled":""} ${sata&&!answered?`aria-pressed="${sel.includes(oi)}"`:""}><span class="k">${L[oi]}</span><span>${esc(t)}</span></button>`}).join("");
+    let why="",submit="";
+    if(answered){const ok=isRight(q,chosen);const keyTxt=sata?q.c.map(i=>L[i]).join(", "):L[q.c];
+      why=`<div class="why"><p class="verdict ${ok?"ok":"bad"}">${ok?"Correct. Patient stability improves.":(sata?"Not quite. The correct answers are "+keyTxt+".":"Not the best choice. The correct answer is "+keyTxt+".")}</p>${sata&&!ok?`<p class="note">Solid green: correct and selected. Dashed green: correct but missed. Red: selected but incorrect.</p>`:""}<p>${esc(q.why)}</p></div>`}
+    else if(sata){submit=`<div class="actions" style="margin-top:12px;align-items:center"><button class="btn primary sata-submit" data-q="${qi}" ${sel.length?"":"disabled"}>Submit answer</button><span class="note">${sel.length} selected</span></div>`}
+    qhtml+=`<section class="q ${answered?"done-q":""}" aria-label="Decision ${qi+1}">
+      <div class="meta"><span class="tag">${esc(q.cat)}</span><span class="step">Item ${qi+1} of 3</span>${sata?`<span class="sata-hint">SELECT ALL THAT APPLY</span>`:""}<span class="time">${clockFor(state.cur+qi/3)}</span></div>
+      <p class="stem">${esc(q.stem)}</p><div class="opts">${opts}</div>${submit}${why}</section>`;
+  });
+  let outcome="";
+  if(isDone(c)){
+    const sc=caseScore(c);
+    const txt=sc===3?["Stable at handoff","Your decisions kept "+c.name.split(" ")[0]+" safe through the day. Night shift receives a clean handoff."]:
+      sc===2?["Guarded","One decision slowed recovery, but the patient is safe at 1900. Review the rationale you missed."]:
+      ["Deteriorating","The rapid response team was called during the shift. Review each rationale before your next shift."];
+    const t=sc===3?"ok":sc===2?"warn":"crit";
+    const next=CASES.findIndex((x,i)=>i>state.cur&&!isDone(x)),anyNext=next>=0?next:CASES.findIndex(x=>!isDone(x));
+    outcome=`<div class="outcome ${t}"><h3>${txt[0]} · ${sc}/3</h3><p>${txt[1]}</p></div>
+      <div class="actions">${anyNext>=0?`<button class="btn primary" id="nextBtn" data-n="${anyNext}">Go to Room ${CASES[anyNext].id}</button>`:`<button class="btn primary" id="toReport">See end-of-shift report</button>`}
+      <button class="btn" id="redoBtn">Redo this patient</button></div>`;
+  }
+  $("#chart").innerHTML=`
+   <div class="pt-head"><span class="rm">${esc(c.unit.toUpperCase())} · ROOM ${c.id}</span><h2>${esc(c.name)}, ${c.age} ${c.sex}</h2><span class="dx">${esc(c.dx)}</span></div>
+   <div class="monitor" role="group" aria-label="Bedside monitor">${c.mon.map(m=>`<div class="vital v-${m[3]==="temp"?"t":m[3]}"><label>${esc(m[0])}</label><b>${esc(m[1])}</b><small>${esc(m[2])}</small></div>`).join("")}
+   </div>
+   <div class="box stab"><h3 style="margin:0">Patient stability</h3><div class="bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s}" aria-label="Patient stability"><div class="fill" style="width:${s}%;background:var(--${tone==="ok"?"ok":tone==="warn"?"lamp":"crit"})"></div></div><span class="lbl">${s}</span>
+     <span class="pill ${a.length?tone:"mute"}">${!a.length?"Awaiting assessment":tone==="ok"?"Improving":tone==="warn"?"Watch closely":"Declining"}</span></div>
+   <div class="grid2">
+     <div class="box"><h3>SBAR handoff from evening shift</h3><dl class="sbar">
+       <dt>S</dt><dd>${esc(c.s)}</dd><dt>B</dt><dd>${esc(c.b)}</dd><dt>A</dt><dd>${esc(c.a)}</dd><dt>R</dt><dd>${esc(c.r)}</dd></dl></div>
+     <div class="box"><h3>Labs &amp; results</h3><table class="labs">${labs}</table><h3 style="margin-top:14px">Active orders</h3><ul class="meds">${c.meds.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>
+   </div>
+   ${qhtml}${outcome}`;
+  const scrollNext=()=>{const qs=document.querySelectorAll(".q");const last=isDone(c)?document.querySelector(".outcome"):qs[qs.length-1];if(last)last.scrollIntoView({behavior:"smooth",block:"center"})};
+  document.querySelectorAll(".opt:not(:disabled)").forEach(b=>b.onclick=()=>{
+    const qi=+b.dataset.q,oi=+b.dataset.o,q=c.qs[qi];const arr=state.ans[c.id]||(state.ans[c.id]=[]);if(arr.length!==qi)return;
+    if(isSata(q)){const k=c.id+"-"+qi,p=pending[k]||(pending[k]=[]);const at=p.indexOf(oi);if(at>=0)p.splice(at,1);else p.push(oi);render();
+      const el=document.querySelector(`.opt[data-q="${qi}"][data-o="${oi}"]`);if(el)el.focus({preventScroll:true});return}
+    arr.push(oi);save();render();scrollNext()});
+  document.querySelectorAll(".sata-submit").forEach(b=>b.onclick=()=>{
+    const qi=+b.dataset.q,k=c.id+"-"+qi,p=(pending[k]||[]).slice().sort((x,y)=>x-y);if(!p.length)return;
+    const arr=state.ans[c.id]||(state.ans[c.id]=[]);if(arr.length!==qi)return;arr.push(p);delete pending[k];save();render();scrollNext()});
+  const nb=$("#nextBtn");if(nb)nb.onclick=()=>{state.cur=+nb.dataset.n;save();render();window.scrollTo({top:0,behavior:"smooth"})};
+  const tr=$("#toReport");if(tr)tr.onclick=()=>{state.view="report";save();render();window.scrollTo({top:0})};
+  const rd=$("#redoBtn");if(rd)rd.onclick=()=>{delete state.ans[c.id];Object.keys(pending).forEach(k=>{if(k.startsWith(c.id+"-"))delete pending[k]});save();render()};
+}
+
+function reportText(){
+  const t=totals();const lines=[];
+  lines.push("CLINICAL ROUNDS: THE COMFORT SHIFT — End-of-shift report");
+  lines.push("Student: "+(state.name||"(name not entered)"));
+  lines.push("Total: "+t.score+"/30 ("+Math.round(t.score/30*100)+"%)");
+  CATS.forEach(cat=>{let n=0,d=0;CASES.forEach(c=>c.qs.forEach((q,i)=>{if(q.cat===cat){d++;if(isRight(q,answers(c)[i]))n++}}));lines.push(cat+": "+n+"/"+d)});
+  lines.push("");
+  CASES.forEach(c=>lines.push("Room "+c.id+" "+c.name+" ("+c.dx+"): "+caseScore(c)+"/3"));
+  const miss=[];CASES.forEach(c=>c.qs.forEach((q,i)=>{if(!isRight(q,answers(c)[i]))miss.push("Rm "+c.id+": "+q.topic)}));
+  lines.push("");lines.push("Topics to review:");lines.push(miss.length?miss.map(m=>"- "+m).join("\n"):"- None. Full marks.");
+  return lines.join("\n");
+}
+
+function renderReport(){
+  const t=totals();const pct=Math.round(t.score/30*100);
+  const cats=CATS.map(cat=>{let n=0,d=0;CASES.forEach(c=>c.qs.forEach((q,i)=>{if(q.cat===cat){d++;if(isRight(q,answers(c)[i]))n++}}));
+    return `<div class="box cat"><h3>${esc(cat)}</h3><b>${n}/${d}</b><span>${Math.round(n/d*100)}% correct</span></div>`}).join("");
+  const rows=CASES.map(c=>{const sc=caseScore(c),tone=sc===3?"ok":sc===2?"warn":"crit",lab=sc===3?"Stable":sc===2?"Guarded":"Deteriorating";
+    return `<tr><td class="n">${c.id}</td><td>${esc(c.name)}</td><td>${esc(c.dx)}</td><td class="n">${sc}/3</td><td><span class="pill ${tone}">${lab}</span></td></tr>`}).join("");
+  const miss=[];CASES.forEach(c=>c.qs.forEach((q,i)=>{if(!isRight(q,answers(c)[i]))miss.push(`<li><b>Room ${c.id}:</b> ${esc(q.topic)}</li>`)}));
+  $("#chart").innerHTML=`<section class="report" style="display:flex;flex-direction:column;gap:16px">
+    <div><h2>End-of-shift report</h2><p class="sub">19:00 · ${t.score}/30 items correct (${pct}%)</p></div>
+    <div class="cats">${cats}</div>
+    <div class="box"><h3>Patients at handoff</h3><div class="tbl-wrap"><table class="rtbl"><thead><tr><th>Room</th><th>Patient</th><th>Diagnosis</th><th>Score</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="box"><h3>Topics to review</h3>${miss.length?`<ul class="review">${miss.join("")}</ul>`:"<p>None. Every decision was correct.</p>"}</div>
+    <div class="box" style="display:flex;flex-direction:column;gap:10px"><h3>Submit to Canvas</h3>
+      <div class="field"><label for="stuName">Your name</label><input id="stuName" value="${esc(state.name)}" autocomplete="name"></div>
+      <textarea class="copytext" id="repText" readonly aria-label="Report text">${esc(reportText())}</textarea>
+      <div class="actions"><button class="btn primary" id="copyBtn">Copy report</button><button class="btn" id="backBtn">Back to the unit</button><span class="toast" id="toast" aria-live="polite"></span></div>
+      <p class="note">Paste the copied report into the Canvas assignment or discussion your instructor set up.</p></div>
+    <p class="note">Educational simulation for BSN students. Rationales reflect common evidence-based practice; always follow current institutional protocols and provider orders.</p>
+  </section>`;
+  $("#stuName").oninput=e=>{state.name=e.target.value;save();$("#repText").value=reportText()};
+  $("#copyBtn").onclick=()=>{const ta=$("#repText");const txt=ta.value;
+    const done=()=>{$("#toast").textContent="Copied"};
+    try{navigator.clipboard.writeText(txt).then(done,()=>{ta.focus();ta.select();$("#toast").textContent="Selected. Press Ctrl+C or ⌘C to copy."})}catch(e){ta.focus();ta.select();$("#toast").textContent="Selected. Press Ctrl+C or ⌘C to copy."}};
+  $("#backBtn").onclick=()=>{state.view="case";save();render()};
+}
+
+function render(){renderHud();renderRooms();if(state.view==="report"&&totals().seen===CASES.length)renderReport();else{state.view="case";renderCase()}}
+
+$("#reportBtn").onclick=()=>{state.view="report";save();render();window.scrollTo({top:0})};
+$("#resetBtn").onclick=()=>{const b=$("#resetBtn");if(b.dataset.armed){state={cur:0,ans:{},name:state.name,view:"case"};save();b.textContent="Start a new shift";delete b.dataset.armed;render()}else{b.dataset.armed="1";b.textContent="Tap again to clear progress";setTimeout(()=>{if(b.dataset.armed){delete b.dataset.armed;b.textContent="Start a new shift"}},4000)}};
+
+function start(data){if(data&&data.ans)state=Object.assign(state,data);else load();render()}
+window.claude?.hot?.snapshot?.(()=>state);
+window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
+</script>
+
+</body></html>
